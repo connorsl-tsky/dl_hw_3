@@ -13,18 +13,16 @@
    - opencv/pillow to load/process images?
    - [x] gfg u-net - https://www.geeksforgeeks.org/machine-learning/u-net-architecture-explained/
    - [x] read u-net paper?
-   - [ ] design preprocessing
-   - [ ] select loss function
-   - [ ] select optimization
-   - [ ] design model
-      - make sure it saves weights
-   - [ ] design submission
-      - [ ] calculate dice/iou
-      - [ ] images of model for demo
-      - [ ] test_model function to load weights and make predictions on test dataset
-      - [ ] folder containing screenshots of iteration of models training and testing
-- [ ] pseudocode
-- [ ] develop 
+
+
+- [x] develop unet 2 block - 11/3/26
+- [x] get unet 2 block working functionally - 11/3/26
+
+- [x] calculate and output dice/iou scores - 11/4/26 1148am
+- [ ] develop unet 3 block - 
+
+
+
 - [ ] test/fine-tune
 - [ ] re-look over report questions (data)
 - [ ] create table of u-net 2/3 blocks and dice/iou with/without normalization, put in report

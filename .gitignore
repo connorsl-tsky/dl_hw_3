@@ -2,3 +2,7 @@ Data/*
 Data
 .venv
 .venv/*
+*.keras
+*.png
+predictions
+predictions/*
