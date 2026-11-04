@@ -1,8 +1,8 @@
+import os
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import keras
 import numpy as np
 from PIL import Image
-import os
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
@@ -156,22 +156,23 @@ def dice_bce_loss(y_true, y_pred):
 
 TRAIN = True
 SAVE = True
-SAVE_NAME = "unet2block.keras"
+SAVE_NAME = "unet2block512.keras"
 BLOCK2 = True # 2block if true, 3block if false
+IMAGE_SIZE = (512, 512)
 
 if __name__ == "__main__":
     # PREPROCESSING
 
     # load images and resize
-    img = load_images(image_dir="./Data/train/image", image_size=(512, 512), isMask=False)
+    img = load_images(image_dir="./Data/train/image", image_size=IMAGE_SIZE, isMask=False)
     
     # load masks and resize
-    mask = load_images(image_dir="./Data/train/mask", image_size=(512, 512), isMask=True)
-    mask = mask.reshape(mask.shape[0], 512, 512, 1)
+    mask = load_images(image_dir="./Data/train/mask", image_size=IMAGE_SIZE, isMask=True)
+    mask = mask.reshape(mask.shape[0], IMAGE_SIZE[0], IMAGE_SIZE[1], 1)
 
     # standardize
 
-    img = img / 255.0
+    img = (img / 255.0).astype("float32")
     mask = (mask > 127).astype("float32")
 
     # validation
@@ -194,10 +195,11 @@ if __name__ == "__main__":
     train_ds = (tf.data.Dataset.from_tensor_slices((train_img, train_mask))
                 .shuffle(100)
                 .batch(1))
-    train_ds = train_ds.map(lambda x, y: (transform({"images": x, "segmentation_masks": y}, training=True)))
+    train_ds = train_ds.map(lambda x, y: (transform({"images": x, "segmentation_masks": y}, training=True)), num_parallel_calls=tf.data.AUTOTUNE)
     train_ds = train_ds.map(lambda x: (x["images"], x["segmentation_masks"])) # separate back into x and y
     train_ds = train_ds.map(lambda x, y: (color(x, training=True), y))
-
+    train_ds = train_ds.prefetch(tf.data.AUTOTUNE)
+ 
     val_ds = tf.data.Dataset.from_tensor_slices((val_img, val_mask)).batch(1)
 
 
@@ -206,9 +208,9 @@ if __name__ == "__main__":
 
     if TRAIN:
         if BLOCK2:
-            model = unet_2block(input_shape=(512, 512, 3))
+            model = unet_2block(input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3))
         else:
-            model = unet_3block(input_shape=(512, 512, 3))
+            model = unet_3block(input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3))
 
         model.compile(
             optimizer=keras.optimizers.Adam(learning_rate=0.001), # need to add .99 momentum somehow
@@ -221,6 +223,7 @@ if __name__ == "__main__":
                 keras.metrics.FalsePositives(thresholds=0.5)
             ]
         )
+        model.summary()
         model.fit(train_ds, validation_data=val_ds, epochs=200, 
                   callbacks=[keras.callbacks.EarlyStopping(
                       monitor="val_loss",
@@ -238,13 +241,12 @@ if __name__ == "__main__":
     # SUBMISSION
 
     # load test
-    test = load_images(image_dir="./Data/test/image", image_size=(256, 256), isMask=False)
+    test = load_images(image_dir="./Data/test/image", image_size=IMAGE_SIZE, isMask=False)
     test = test / 255.0 # standardize
 
     # eval
     loss, acc, tp, tn, fn, fp = model.evaluate(val_ds)
     print(f"IOU: {tp / (tp + fp + fn)}, DICE: {2*tp / (2*tp + fp + fn)}, LOSS: {loss}, BIN ACC: {acc}, TP: {tp}, TN: {tn}, FN: {fn}, FP: {fp}")
-    
     
     """
     Runs:
@@ -255,17 +257,23 @@ if __name__ == "__main__":
     model2.keras = LOSS: 0.1573638916015625, BIN ACC: 0.9406547546386719, IOU: 0.0, TP: 11079.0, TN: 235508.0, FN: 13448.0, FP: 2109.0 - i think i stopped standardizing the mask and kept it binary
     3model.keras = IOU: 0.43483525354076463, DICE: 0.6061117504155479, LOSS: 0.16268201172351837, BIN ACC: 0.9412422180175781, TP: 11851.0, TN: 234890.0, FN: 12676.0, FP: 2727.0 - first iteration of unet3. still kinda sucks
 
-    first major tune - skip connections, dice loss, threshold, resolution, He weights, not loading train from test
+    first major tune - skip connections, dice loss, threshold, He weights, not loading train from test, onednn, float32
+    unet2block.keras - IOU: 0.5979284699443967, DICE: 0.7483795190972508, LOSS: 0.4314207434654236, BIN ACC: 0.9562788009643555, TP: 68177.0, TN: 934554.0, FN: 21904.0, FP: 23941.0, 62 epochs
+    unet3block.keras - 226pm or 235pm IOU: 0.5765706351961125, DICE: 0.7314237907575791, LOSS: 0.46918046474456787, BIN ACC: 0.9534645080566406, TP: 66444.0, TN: 933336.0, FN: 23637.0, FP: 25159.0 91 epochs 407pm (90m)
+    okay 3 block isn't much better
 
+    i think i need to do 512x512
+    but i might not be able to do it tonight. only have 40m or so
+    lets see if its possible
+
+    wait my laptop has a gpu???
     """
-
-
 
     # predict
     yhat = model.predict(test)
     yhat = (np.array(yhat) > 0.5).astype(np.uint8) * 255
     for i in range(len(yhat)):
-        pred = yhat[i].reshape((256, 256)).astype(np.uint8)
+        pred = yhat[i].reshape(IMAGE_SIZE).astype(np.uint8) # from (256, 256, 1) to (256, 256)
         mask = Image.fromarray(pred).resize((512, 512), Image.NEAREST)
         mask.save(f"./predictions/{i}.png")
 

@@ -511,4 +511,105 @@ You were correct about loading from the testing set, the training set has 80 ima
 
 # Response 8
 
+The most likely cause is memory pressure. The silent exit is probably the same problem you hit earlier, not a bug in the new code. I can't confirm that from here, but it fits the symptoms.
+
+## What's probably happening
+
+Going from 256×256 to 512×512 quadruples the pixels, and the full-resolution skip connections now keep large 64-channel feature maps alive at 512×512 for the backward pass. That should make steps about 4x slower, not 120x. A jump that big, followed by a process that dies with no traceback, usually means Windows ran out of RAM and started swapping to disk before killing the process. Your 7 GB of free memory is tight for this. The exit code from `echo $?` probably isn't informative, because 127 normally means "command not found" in bash.
+
+You can check this by opening Task Manager (Performance → Memory) while it trains. If memory climbs to the limit, that's the cause.
+
+## Simplest fixes
+
+**1. Go back to 256×256.** This is what ran at about 1 second per step, and the 80-image training set should help your score more than resolution will. Change the three places that say 512:
+
+```python
+img = load_images(image_dir="./Data/train/image", image_size=(256, 256), isMask=False)
+mask = load_images(image_dir="./Data/train/mask", image_size=(256, 256), isMask=True)
+mask = mask.reshape(mask.shape[0], 256, 256, 1)
+...
+model = unet_2block(input_shape=(256, 256, 3))   # and unet_3block
+```
+
+**2. Convert the images to float32.** Dividing by 255.0 produces float64, which uses twice the memory for no benefit:
+
+```python
+img = (img / 255.0).astype("float32")
+```
+
+**3. Move the oneDNN line to the very top of the file**, above `import keras`. Keras may import TensorFlow itself, so setting the variable after `import keras` could be too late for it to take effect:
+
+```python
+import os
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+import keras
+```
+
+If the speed is fine at 256 and you later want to try 512 again, close other programs first, since that frees up RAM.
+
+## A bug you'd hit next
+
+Your test images are still loaded at 256×256, but the model now takes whatever size you train it on. If you train at 512 and predict with 256 test images (or vice versa), `model.predict` will fail with a shape error. Keep the `Data/test/image` loading and the `reshape((256, 256))` at the end consistent with your training size. With everything at 256, your current code is already consistent.
+
 # Summary 8
+
+TDL 
+- [x] go back to 256x256, makes sense
+- [x] go to float32
+- [x] move dnn line up
+
+
+# Prompt 9
+
+Okay, I am able to succesfully train at 256x256, and seeing noticeable improvements of IoU of .6 and DICE of .75. But again, when I switch to 512x512 - which I think is necessary for more performance gains - for U-Net 2 Block, I am noticing strange behavior, in that Task Manager is saying my CPU is spiking every so often at 70%, hovering at 10% otherwise, and my memory usage is constant around 50%. I think this may be related to tensorflow being unable to estimate how much longer an epoch might take, as its estimate goes up and down between 2 minutes and 5 minutes. Do you know what the cause of this might be? When I was training at 256x256, My CPU was a pretty constant 60% or so, if I'm remembering correctly. 
+
+I also found out recently that my laptop has a GPU - an NVIDIA RTX A500 Laptop GPU. Is this compatible with Tensorflow? Would using it speed up the training process? 
+
+# Response 9
+
+Your numbers suggest I was probably wrong about memory last time. If usage is steady at 50%, you're not running out of RAM, so treat my earlier diagnosis as unlikely.
+
+## What's probably happening
+
+Low CPU with periodic spikes usually means the CPU is waiting on something that runs on one thread. Your pipeline has no `num_parallel_calls` and no `prefetch`, so each step goes in sequence:
+
+1. Augment the next image, which is mostly single-threaded and shows up as ~10% CPU.
+2. Train on it, which uses all cores and shows up as the 70% spike.
+
+At 256×256 the augmentation was cheap enough not to matter. At 512×512 it's 4x more pixels, and `RandomElasticTransform` is the most expensive of your layers by far, so it now takes a large share of each step. The ETA bouncing between 2 and 5 minutes fits this, since TensorFlow is averaging over steps that alternate between slow and fast phases. I can't confirm this from here, but it matches what you're describing.
+
+The fix is two small edits, which let TensorFlow prepare the next batch while the current one trains:
+
+```python
+train_ds = train_ds.map(lambda x, y: (transform({"images": x, "segmentation_masks": y}, training=True)),
+                        num_parallel_calls=tf.data.AUTOTUNE)
+train_ds = train_ds.map(lambda x: (x["images"], x["segmentation_masks"]))
+train_ds = train_ds.map(lambda x, y: (color(x, training=True), y))
+train_ds = train_ds.prefetch(tf.data.AUTOTUNE)
+```
+
+To test the theory, temporarily comment out the `RandomElasticTransform` line and see whether the CPU stays high and the step time drops. If it does, the elastic layer is your bottleneck.
+
+## The GPU
+
+Yes, an RTX A500 is a CUDA-capable GPU that TensorFlow supports, and it would very likely speed training up a lot, probably several times over a CPU for a convolutional model like this. The catch is in your own log: TensorFlow 2.11 and newer can't use the GPU on native Windows. You have two routes:
+
+1. **WSL2 (Linux inside Windows).** Install it with `wsl --install` from an admin terminal, then inside it create a Python environment and run `pip install "tensorflow[and-cuda]"`. Check that it works with `python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"`, which should list your GPU. You'll need a recent NVIDIA driver on the Windows side. I'm going from memory on these steps, so check TensorFlow's current install page before following them.
+2. **Google Colab.** If WSL2 looks like a hassle, upload your project and data to Colab, which provides a free GPU with no setup. For a homework-sized project this is the simplest option.
+
+One limitation: the A500 has about 4 GB of VRAM. The 2-block model at 512×512 with batch size 1 should fit, but the 3-block model or larger batches might not. If you hit an out-of-memory error, drop back to batch size 1 or a smaller model.
+
+Once the model runs on the GPU, training gets fast enough that the CPU data pipeline becomes the bottleneck, so the `prefetch` change matters even more then.
+
+I'd do the pipeline fix first, since it takes two minutes and may be enough on its own, and move to the GPU if 512×512 is still too slow.
+
+# Summary 9
+
+TDL
+ - [x] try commenting out the elastic transform and see what happens
+    - yes it is the bottleneck
+ - [x] add the prefetch and num parallel calls lines
+ - [x] try to see if you can access the GPU in wsl
+
+
+i can also ask about autosaving at each step - such that it overwrites the same file to prevent memory overloading. would it be possible to resume training from that saved model? or would i just have to train from that. so that way i can pause it and come back to it
