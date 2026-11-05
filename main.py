@@ -7,7 +7,6 @@ from PIL import Image
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
-keras.mixed_precision.set_global_policy("mixed_float16")
 
 def encoder_block(inputs, num_filters):
     """
@@ -210,6 +209,7 @@ if __name__ == "__main__":
     # TRAINING
 
     if TRAIN:
+        keras.mixed_precision.set_global_policy("mixed_float16")
         if BLOCK2:
             model = unet_2block(input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3))
         else:
@@ -270,6 +270,22 @@ if __name__ == "__main__":
     lets see if its possible
 
     wait my laptop has a gpu???
+    okay, working on getting it configured
+
+    comment out elastic transform
+    commenting out elastictransform makes it take really fast -> that augmentation layer is the bottleneck
+    my memory hovers around 78% then, and I don't even think i use the GPU, all CPU
+    but i also have tabs open
+
+    i'm gonna try 2 batches with elastic transform and close everything out
+    it was pretty slow, ran it for 1 epoch took like 2m. 
+    i did close all my tabs besides wsl and task manager
+    memory would rise to about 75%
+    GPU was not used during training, idk
+    CPU would climb to 100% for augmentation, but be barely used during training
+    so idek what's doing the work
+    i think i gotta get rid of elastic transform and see if that does it
+    but no errors
     """
 
     # predict

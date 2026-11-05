@@ -681,3 +681,164 @@ TDL
  - [ ] test
  - [ ] see what happens when you comment out elastictransform
  - [ ] try batch(2)
+
+
+
+
+ # Prompt 11
+
+I'm getting this error
+[connor@~/dl_hw_3]$ ./.venv/bin/python main.py
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793841946.880141    5796 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+W0000 00:00:1793841958.717502    5796 gpu_bfc_allocator.cc:47] Overriding orig_value setting because the TF_FORCE_GPU_ALLOW_GROWTH environment variable is set. Original config value was false.
+I0000 00:00:1793841958.718161    5796 gpu_device.cc:2036] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 1768 MB memory:  -> device: 0, name: NVIDIA RTX A500 Laptop GPU, pci bus id: 0000:01:00.0, compute capability: 8.6
+Traceback (most recent call last):
+  File "/home/connor/dl_hw_3/main.py", line 201, in <module>
+    train_ds = train_ds.map(lambda x, y: (transform({"images": x, "segmentation_masks": y}, training=True)), num_parallel_calls=tf.data.AUTOTUNE)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/data/ops/dataset_ops.py", line 2363, in map
+    return map_op._map_v2(
+           ~~~~~~~~~~~~~~^
+        self,
+        ^^^^^
+    ...<5 lines>...
+        name=name,
+        ^^^^^^^^^^
+    )
+    ^
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/data/ops/map_op.py", line 57, in _map_v2
+    return _ParallelMapDataset(
+        input_dataset,
+    ...<4 lines>...
+        use_unbounded_threadpool=use_unbounded_threadpool,
+        name=name)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/data/ops/map_op.py", line 202, in __init__
+    self._map_func = structured_function.StructuredFunctionWrapper(
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        map_func,
+        ^^^^^^^^^
+        self._transformation_name(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        dataset=input_dataset,
+        ^^^^^^^^^^^^^^^^^^^^^^
+        use_legacy_function=use_legacy_function)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/data/ops/structured_function.py", line 265, in __init__
+    self._function = fn_factory()
+                     ~~~~~~~~~~^^
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/eager/polymorphic_function/polymorphic_function.py", line 1259, in get_concrete_function
+    concrete = self._get_concrete_function_garbage_collected(*args, **kwargs)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/eager/polymorphic_function/polymorphic_function.py", line 1229, in _get_concrete_function_garbage_collected
+    self._initialize(args, kwargs, add_initializers_to=initializers)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/eager/polymorphic_function/polymorphic_function.py", line 696, in _initialize
+    self._concrete_variable_creation_fn = tracing_compilation.trace_function(
+                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        args, kwds, self._variable_creation_config
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/eager/polymorphic_function/tracing_compilation.py", line 178, in trace_function
+    concrete_function = _maybe_define_function(
+        args, kwargs, tracing_options
+    )
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/eager/polymorphic_function/tracing_compilation.py", line 283, in _maybe_define_function
+    concrete_function = _create_concrete_function(
+        target_func_type, lookup_func_context, func_graph, tracing_options
+    )
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/eager/polymorphic_function/tracing_compilation.py", line 310, in _create_concrete_function
+    traced_func_graph = func_graph_module.func_graph_from_py_func(
+        tracing_options.name,
+    ...<7 lines>...
+        create_placeholders=False,
+    )
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/framework/func_graph.py", line 1060, in func_graph_from_py_func
+    func_outputs = python_func(*func_args, **func_kwargs)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/eager/polymorphic_function/polymorphic_function.py", line 599, in wrapped_fn
+    out = weak_wrapped_fn().__wrapped__(*args, **kwds)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/data/ops/structured_function.py", line 231, in wrapped_fn
+    ret = wrapper_helper(*args)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/data/ops/structured_function.py", line 161, in wrapper_helper
+    ret = autograph.tf_convert(self._func, ag_ctx)(*nested_args)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/autograph/impl/api.py", line 693, in wrapper
+    raise e.ag_error_metadata.to_exception(e)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/autograph/impl/api.py", line 690, in wrapper
+    return converted_call(f, args, kwargs, options=options)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/autograph/impl/api.py", line 439, in converted_call
+    result = converted_f(*effective_args, **kwargs)
+  File "/tmp/__autograph_generated_fileze2mag9q.py", line 5, in <lambda>
+    tf__lam = lambda x, y: ag__.with_function_scope(lambda lscope: ag__.converted_call(transform, ({'images': x, 'segmentation_masks': y},), dict(training=True), lscope), 'lscope', ag__.STD)
+                           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/autograph/core/function_wrappers.py", line 113, in with_function_scope
+    return thunk(scope)
+  File "/tmp/__autograph_generated_fileze2mag9q.py", line 5, in <lambda>
+    tf__lam = lambda x, y: ag__.with_function_scope(lambda lscope: ag__.converted_call(transform, ({'images': x, 'segmentation_masks': y},), dict(training=True), lscope), 'lscope', ag__.STD)
+                                                                   ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/autograph/impl/api.py", line 377, in converted_call
+    return _call_unconverted(f, args, kwargs, options)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/autograph/impl/api.py", line 459, in _call_unconverted
+    return f(*args, **kwargs)
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/keras/src/utils/traceback_utils.py", line 122, in error_handler
+    raise e.with_traceback(filtered_tb) from None
+  File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/tensorflow/python/framework/ops.py", line 1138, in _create_c_op
+    raise ValueError(e.message)
+ValueError: in user code:
+
+    File "/home/connor/dl_hw_3/main.py", line 201, in None  *
+        lambda x, y: (transform({"images": x, "segmentation_masks": y}, training=True))
+    File "/home/connor/dl_hw_3/.venv/lib/python3.14/site-packages/keras/src/utils/traceback_utils.py", line 122, in error_handler  **
+        raise e.with_traceback(filtered_tb) from None
+
+    ValueError: Exception encountered when calling RandomElasticTransform.call().
+
+    Unsupported dtype19 for '{{node sequential_1/random_elastic_transform_1/range_4}} = Range[Tidx=DT_HALF](sequential_1/random_elastic_transform_1/range_4/start, sequential_1/random_elastic_transform_1/range_4/limit, sequential_1/random_elastic_transform_1/range_4/delta)' with input shapes: [], [], [] and with computed input tensors: input[0] = <0>, input[1] = <512>, input[2] = <1>.
+
+    Arguments received by RandomElasticTransform.call():
+      • data={'images': 'tf.Tensor(shape=(None, 512, 512, 3), dtype=float16)', 'segmentation_masks': 'tf.Tensor(shape=(None, 512, 512, 1), dtype=float16)'}
+      • training=True
+
+ # Response 11
+
+ That error comes from the mixed-precision line I suggested, so it's my mistake. The global policy makes every Keras layer compute in float16, including your augmentation layers. `RandomElasticTransform` internally calls `range` on a half-precision type, which TensorFlow doesn't support. That's why it only appeared after you added the policy.
+
+## Simplest fix
+
+You only want float16 inside the U-Net, not in the augmentation. So set the policy after the augmentation layers are created, just before the model is built. Layers take the policy that's active when they're constructed.
+
+Remove this line from near the top of the file:
+
+```python
+keras.mixed_precision.set_global_policy("mixed_float16")
+```
+
+And put it right before the model is created:
+
+```python
+if TRAIN:
+    keras.mixed_precision.set_global_policy("mixed_float16")
+    if BLOCK2:
+        model = unet_2block(input_shape=(512, 512, 3))
+```
+
+Your `transform` and `color` layers are built earlier, so they stay float32. Keep `dtype='float32'` on the final sigmoid layer as before.
+
+If you'd rather leave the policy at the top, the alternative is to add `dtype="float32"` to each augmentation layer, e.g. `keras.layers.RandomElasticTransform(dtype="float32")`, and likewise for the rotation, translation, brightness and contrast layers. Moving one line is less to type.
+
+## One thing in your log
+
+TensorFlow created the GPU device with only about 1768 MB of memory, not the full 4 GB. WSL and Windows are holding the rest, which explains the allocation errors you saw. Mixed precision should help a lot here, and if it's still tight, halving the filter counts (32/64/128) is the next step. `nvidia-smi` in WSL will show how much is free before you start training.
+
+ # Summary 11
+
+ okay, interesting
+ my fault for trusting AI. I will move that line and see what happens
+ I really wish I had the time to thoroughly research each of these layers and components huh. 
+
+
+ # Prompt 12
+
+  - how to save a model after each epoch or something, so i can load it back in if it gets interrupted during training (and if that's okay?)
+  - is elastic transform even worth it
+  - when you say increase to 2 batches, does that also mean the validation pipeline?
+  - and give an update on my two tests
