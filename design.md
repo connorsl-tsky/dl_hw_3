@@ -1,5 +1,8 @@
 # design
 
+find . -type f -not -path './.git*' -not -path './.venv*' | xargs sed -i 's/\r//g'
+removes carriage returns for crlf to lf. just in case i need it
+
 ## preprocessing
 from gfg
 Image from PIL

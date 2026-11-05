@@ -612,4 +612,72 @@ TDL
  - [x] try to see if you can access the GPU in wsl
 
 
+
 i can also ask about autosaving at each step - such that it overwrites the same file to prevent memory overloading. would it be possible to resume training from that saved model? or would i just have to train from that. so that way i can pause it and come back to it
+
+
+# Prompt 10
+
+Yes, adding those two lines sped things up greatly. However, I'm curious about using my GPU:
+
+I got my repository copied to my Arch WSL environment, python and pip are installed and up to date, and it can locate and use my GPU. 
+
+After installing the packages, when I run main.py (without modification, besides adding the prefetch and num_parallel_calls lines), the GPU will be used, but rarely and only in short spikes, particularly in between epochs. In between those epochs, however, I will hit memory allocation errors, as it maxes out those 4 GB. 
+
+Do I need to do anything different to properly integrate my GPU? This is with the U-Net 2 Block, with image size of 512x512.
+
+# Response 10
+
+
+Probably nothing is wrong with the GPU integration. Both symptoms have ordinary explanations, though I can't see your exact error, so this is my best read.
+
+## Why the GPU is barely used
+
+`tf.data` pipelines run on the CPU, so your augmentation (especially `RandomElasticTransform` at 512×512) is still computed on the CPU. The GPU finishes each training step almost instantly, then waits for the next augmented image. That produces short spikes with idle gaps. Batch size 1 also gives the GPU very little work per step. To confirm, comment out the elastic transform temporarily. If GPU utilization jumps, that's the bottleneck.
+
+The easy fixes are to keep `prefetch` and `num_parallel_calls` (which you have), and to try `batch(2)` if memory allows. Since the GPU is faster than the CPU here, training should still be quicker than your CPU-only runs.
+
+## The memory errors
+
+TensorFlow grabs nearly all GPU memory when it starts, so seeing 4 GB "maxed out" is normal and not a problem in itself. The real allocation errors are separate. Your A500's 4 GB is also shared with Windows, which uses some for the display. The errors appearing between epochs is consistent with validation needing extra memory on top of what training already holds.
+
+Two small changes should help.
+
+**1. Allocate memory on demand.** Put this at the top of `main.py`, before anything uses the GPU:
+
+```python
+import os
+os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+import keras
+```
+
+**2. Use mixed precision.** This stores activations in 16-bit, which roughly halves memory use and is faster on your GPU's tensor cores. Add this after the imports:
+
+```python
+keras.mixed_precision.set_global_policy("mixed_float16")
+```
+
+Then make the final layer of each U-Net output float32, so the loss and metrics stay numerically stable:
+
+```python
+outputs = keras.layers.Conv2D(num_classes, 1, padding='same', activation='sigmoid', dtype='float32')(d2)
+```
+
+## If it still fails
+
+- Close anything else using the GPU (browsers, video) and check `nvidia-smi` in WSL to see what's holding memory.
+- As a last resort, halve the filter counts (64→32, 128→64, 256→128) in the 2-block model.
+
+If errors persist, paste the exact message and the lines just before it. "Out of memory" during a convolution and during `evaluate` point to different fixes.
+
+# Summary 10
+
+
+TDL
+ - [x] allocate on demand
+ - [x] add mixed precision
+ - [x] make output of each unet float32
+ - [ ] test
+ - [ ] see what happens when you comment out elastictransform
+ - [ ] try batch(2)

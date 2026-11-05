@@ -1,10 +1,13 @@
 import os
+os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import keras
 import numpy as np
 from PIL import Image
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+
+keras.mixed_precision.set_global_policy("mixed_float16")
 
 def encoder_block(inputs, num_filters):
     """
@@ -66,7 +69,7 @@ def unet_2block(input_shape=(512, 512, 3), num_classes=1):
     d1 = decoder_block(b1, s2, 128)
     d2 = decoder_block(d1, s1, 64)
     
-    outputs = keras.layers.Conv2D(num_classes, 1, padding='same', activation='sigmoid')(d2)
+    outputs = keras.layers.Conv2D(num_classes, 1, padding='same', activation='sigmoid', dtype='float32')(d2)
     
     model = keras.models.Model(inputs=inputs, outputs=outputs, name='U-Net2')
     return model
@@ -99,7 +102,7 @@ def unet_3block(input_shape=(512, 512, 3), num_classes=1):
     d2 = decoder_block(d1, s2, 128)
     d3 = decoder_block(d2, s1, 64)
     
-    outputs = keras.layers.Conv2D(num_classes, 1, padding='same', activation='sigmoid')(d3)
+    outputs = keras.layers.Conv2D(num_classes, 1, padding='same', activation='sigmoid',  dtype='float32')(d3)
     
     model = keras.models.Model(inputs=inputs, outputs=outputs, name='U-Net3')
     return model
