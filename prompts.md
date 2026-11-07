@@ -829,16 +829,120 @@ If you'd rather leave the policy at the top, the alternative is to add `dtype="f
 
 TensorFlow created the GPU device with only about 1768 MB of memory, not the full 4 GB. WSL and Windows are holding the rest, which explains the allocation errors you saw. Mixed precision should help a lot here, and if it's still tight, halving the filter counts (32/64/128) is the next step. `nvidia-smi` in WSL will show how much is free before you start training.
 
- # Summary 11
+# Summary 11
 
  okay, interesting
  my fault for trusting AI. I will move that line and see what happens
  I really wish I had the time to thoroughly research each of these layers and components huh. 
 
 
- # Prompt 12
+# Prompt 12
 
-  - how to save a model after each epoch or something, so i can load it back in if it gets interrupted during training (and if that's okay?)
-  - is elastic transform even worth it
-  - when you say increase to 2 batches, does that also mean the validation pipeline?
-  - and give an update on my two tests
+Okay, when I try it with elastic transform and 2 batches, it still runs pretty slow, and I don't think the GPU is used at all except between epochs. But, when I comment out elastic transform and keep it at 1 batch, and it runs really fast, but I don't think it uses GPU much either. Is elastic transform even necessary for significant metric gains? For the performance hit, is it even worth it?
+
+Quick question - when you say update to 2 batches via .batch(2), that also means updating the validation dataset batching to 2 as well?
+
+And how would I go about saving the model after each epoch or something? If it runs for an hour or so, I'm worried it's going to crash and ruin progress, but if it updated a 'model.keras' file after each epoch, that could even let me pause the training briefly, and pick it back up later, yeah?
+
+# Response 12
+
+## Is elastic transform worth it?
+
+Probably not for your setup. The U-Net paper stressed it because their microscopy data had very few images and deformable tissue. You have 80 training images, plus rotation, translation, and brightness/contrast augmentation. Retinal vessels also don't deform much between images, so the main gains come from the simpler transforms. I can't promise it won't help a little, but it's the first thing I'd drop. If you want to know for sure, compare the validation Dice with and without it. With 16 validation images, differences of a point or two are noise.
+
+If you drop it, the pipeline is cheap enough that the GPU is no longer starved. A fast run with low GPU utilization isn't a problem on its own: this model is small, batch size 1 gives the GPU little work per step, and the Task Manager GPU graph often doesn't show CUDA compute at all (its default panels show 3D/video engines). Check `nvidia-smi` in WSL while training instead. What matters is steps per second, not the utilization number.
+
+## Does validation batch size have to match?
+
+No. Training and validation batch sizes are independent. Changing validation to 2 only affects speed and memory during evaluation, and the metrics come out the same either way. Since validation only runs forward passes, it can safely use the same size or larger than training, but leaving it at 1 is fine.
+
+## Saving after each epoch and resuming
+
+Yes, a checkpoint callback does exactly this. Add it to the `callbacks` list:
+
+```python
+callbacks=[
+    keras.callbacks.ModelCheckpoint("checkpoint.keras", save_best_only=True, monitor="val_loss"),
+    keras.callbacks.EarlyStopping(monitor="val_loss", restore_best_weights=True, patience=15),
+]
+```
+
+With `save_best_only=True`, the file is only overwritten when validation loss improves, so you always keep the best model so far. Drop that argument if you want the latest epoch regardless.
+
+To resume after a crash or a pause, load the checkpoint and call `fit` again:
+
+```python
+model = keras.models.load_model("checkpoint.keras")   # includes weights and optimizer state
+model.fit(train_ds, validation_data=val_ds, epochs=200, initial_epoch=37, callbacks=[...])
+```
+
+Set `initial_epoch` to the number of epochs already completed (the epoch counter just affects the display and the epoch limit). Because the optimizer state is saved in the file, training picks up where it left off. Two caveats: `load_model` needs the custom loss registered, which your `@register_keras_serializable()` decorator already handles, and the EarlyStopping patience counter restarts from zero on resume, which is harmless.
+
+To pause deliberately, you can just press Ctrl+C between epochs (after a checkpoint has been written), then resume later the same way.
+
+# Summary 12
+
+i can also save the last epoch in a file as well, if need be. 
+or i can just start it over, for this i think i can just start it over
+
+- [x] look at nvidia-smi
+- [x] keep validation at 1
+- [x] call the checkpoint callback
+- [x] comment out elastic transform and test
+- [x] update logic for loading from restart
+
+# Prompt 13
+
+I'm now running into a problem where when I load the testing dataset, the predictions are being mapped to the wrong test image. For example, test/image/0.png corresponds to something like predictions/4.png, and predictions/0.png corresponds to test/image/15.png. This has only started happening since moving to WSL. Do you know what the cause of this could be? Or how to fix it?
+
+# Response 13
+
+The cause is `os.scandir`. It returns files in whatever order the filesystem hands them back, with no guarantee of sorting. Windows (NTFS) happens to return them alphabetically, but Linux filesystems like WSL's ext4 return them in an arbitrary order. Your code was relying on Windows' ordering without you knowing it.
+
+## The important part: training may be affected too
+
+`load_images` is used for both the image folder and the mask folder. If the two folders come back in different orders, then image 5 gets paired with some other image's mask, and the model trains on mismatched pairs. That would silently hurt your scores since moving to WSL. So fix this before trusting any recent results.
+
+## Fix
+
+Sort the files in `load_images`. Plain alphabetical sorting would put `10.png` before `2.png`, so sort by the number in the filename:
+
+```python
+files = sorted(
+    (f for f in os.scandir(image_dir)),
+    key=lambda f: int(os.path.splitext(f.name)[0])
+)
+for image_file in files:
+    ...
+```
+
+Replace the `for image_file in os.scandir(image_dir):` line with that. It assumes names like `0.png`, `1.png`, and so on. If your filenames contain other text, tell me what they look like and I'll adjust the sort key.
+
+## Make the output names match
+
+Your prediction loop names files by position (`{i}.png`), which only works if the sort order matches the original names. Safer to reuse the real filenames:
+
+```python
+test_names = sorted(os.listdir("./Data/test/image"), key=lambda n: int(os.path.splitext(n)[0]))
+
+for name, p in zip(test_names, yhat):
+    pred = p.reshape((256, 256)).astype(np.uint8)
+    Image.fromarray(pred).resize((512, 512), Image.NEAREST).save(f"./predictions/{name}")
+```
+
+Now `predictions/0.png` always corresponds to `test/image/0.png`, whatever the order.
+
+## Quick check
+
+Print the first few filenames from the image folder and the mask folder after sorting. They should line up one to one. If your masks have different names than the images (for example `0_mask.png`), the numeric key above would need to handle that.
+
+Since the old pairing may have been wrong, retrain after the fix. If your recent metrics looked worse than your Windows runs, this is a likely reason.
+
+
+# Summary 13
+
+ah. glad it's a pretty easy fix
+
+- [x] fix load_images
+- [xd] make output names match
+- [ ] test batching to see if that better uses GPU
