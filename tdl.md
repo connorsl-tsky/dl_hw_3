@@ -19,22 +19,23 @@
 - [x] get unet 2 block working functionally - 11/3/26
 
 - [x] calculate and output dice/iou scores - 11/4/26 1148am
-- [ ] develop unet 3 block - 
+- [x] develop unet 3 block - 
+
+- [x] test/fine-tune
 
 
-
-- [ ] test/fine-tune
-- [ ] re-look over report questions (data)
-- [ ] create table of u-net 2/3 blocks and dice/iou with/without normalization, put in report
-- [ ] add loss/optimization to report
-- [ ] how to avoid under/overfit model in report
-- [ ] make sure code is well commented
-- [ ] README explains how to run model
-- [ ] zip file - complete hw report
-- [ ] zip file - report of prompts used for this assignment
-- [ ] zip file - all code
-- [ ] zip file - best model weights
-- [ ] create zip file first_last_hw3.zip
-- [ ] submit to kaggle
-- [ ] submit zip file
+- [x] re-look over report questions (data)
+- [x] create table of u-net 2/3 blocks and dice/iou with/without normalization, put in report
+- [x] add loss/optimization to report
+- [x] how to avoid under/overfit model in report
+- [x] make sure code is well commented
+- [x] README explains how to run model
+- [x] test_model function
+- [x] zip file - complete hw report
+- [x] zip file - report of prompts used for this assignment
+- [x] zip file - all code
+- [x] zip file - best model weights
+- [x] create zip file first_last_hw3.zip
+- [x] submit to kaggle
+- [x] submit zip file
 

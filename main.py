@@ -162,10 +162,10 @@ def dice_bce_loss(y_true, y_pred):
 
 IMAGE_SIZE = (512, 512)
 SAVE_NAME = "unet2.keras"
-TRAIN = True
+TRAIN = False
 SAVE = True # save model at end, ignored when not training
 BLOCK2 = True # 2block if true, 3block if false, ignored when not training, and when load is true
-LOAD = True # load model from checkpoints, ignored when not training
+LOAD = False # load model from checkpoints, ignored when not training
 
 if __name__ == "__main__":
     print(f"IMAGE_SIZE: {IMAGE_SIZE}, SAVE_NAME: {SAVE_NAME}, TRAIN: {TRAIN}, SAVE: {SAVE}, BLOCK2: {BLOCK2}, LOAD: {LOAD}")
@@ -180,8 +180,8 @@ if __name__ == "__main__":
     mask = mask.reshape(mask.shape[0], IMAGE_SIZE[0], IMAGE_SIZE[1], 1)
 
     # standardize
-
     img = (img / 255.0).astype("float32")
+    # img = img.astype("float32")
     mask = (mask > 127).astype("float32")
 
     # validation
@@ -201,6 +201,7 @@ if __name__ == "__main__":
 
 
     # stolen form claude, see prompt 1 in prompts.md
+    # create training and validation data pipelines
     train_ds = (tf.data.Dataset.from_tensor_slices((train_img, train_mask))
                 .shuffle(100)
                 .batch(1))
@@ -218,13 +219,16 @@ if __name__ == "__main__":
     if TRAIN:
         keras.mixed_precision.set_global_policy("mixed_float16")
         if LOAD:
+            # load checkpoint
             loaded = "check_"+SAVE_NAME
             print(f"LOADING {loaded}")
             model = keras.models.load_model(loaded)
         else:
             if BLOCK2:
+                # build new 2block model
                 model = unet_2block(input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3))
             else:
+                # build new 3block model
                 model = unet_3block(input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3))
 
         model.compile(
@@ -239,6 +243,8 @@ if __name__ == "__main__":
             ]
         )
         model.summary()
+
+        # train
         model.fit(train_ds, validation_data=val_ds, epochs=200, 
                   callbacks=[
                     keras.callbacks.EarlyStopping(monitor="val_loss",restore_best_weights=True, patience=15),
@@ -246,22 +252,43 @@ if __name__ == "__main__":
                   ])
 
         if SAVE:
+            # save
             model.save(SAVE_NAME)
     else:
+        # load model without training
         model = keras.models.load_model(SAVE_NAME)
 
 
 
     # SUBMISSION
 
-    # load test
-    test = load_images(image_dir="./Data/test/image", image_size=IMAGE_SIZE, isMask=False)
-    test = test / 255.0 # standardize
-
     # eval
     loss, acc, tp, tn, fn, fp = model.evaluate(val_ds)
     print(f"IOU: {tp / (tp + fp + fn)}, DICE: {2*tp / (2*tp + fp + fn)}, LOSS: {loss}, BIN ACC: {acc}, TP: {tp}, TN: {tn}, FN: {fn}, FP: {fp}")
     print(f"IMAGE_SIZE: {IMAGE_SIZE}, SAVE_NAME: {SAVE_NAME}, TRAIN: {TRAIN}, SAVE: {SAVE}, BLOCK2: {BLOCK2}, LOAD: {LOAD}")
+
+    # load test
+    test = load_images(image_dir="./Data/test/image", image_size=IMAGE_SIZE, isMask=False)
+    test = test / 255.0 # standardize
+    
+    # predict
+    yhat = model.predict(test)
+    yhat = (np.array(yhat) > 0.5).astype(np.uint8) * 255
+
+    # sort test_names
+    test_names = sorted(os.listdir("./Data/test/image"), key=lambda n:int(os.path.splitext(n)[0]))
+
+    # create directory if it doesn't exist
+    if not os.path.exists("./predictions"):
+        os.makedirs("./predictions")
+
+    # output to ./predictions
+    for name, p in zip(test_names, yhat):
+        pred = p.reshape(IMAGE_SIZE).astype(np.uint8) # from (256, 256, 1) to (256, 256)
+        mask = Image.fromarray(pred).resize((512, 512), Image.NEAREST)
+        mask.save(f"./predictions/{name}")
+
+    # then run `make_submission.py ./predictions`
     
     """
     Runs:
@@ -350,17 +377,22 @@ if __name__ == "__main__":
     unet 2 - IOU: 0.6906963548050298, DICE: 0.817055472843532, LOSS: 0.3033336102962494, BIN ACC: 0.9675099849700928, TP: 304307.0, TN: 3753724.0, FN: 69390.0, FP: 66883.0
     keeping that
     best one yet, .81 score or something on kaggle, or .801. 
+
+
+    final unet 2
+    unet 2 - IOU: 0.6906963548050298, DICE: 0.817055472843532, LOSS: 0.3033336102962494, BIN ACC: 0.9675099849700928, TP: 304307.0, TN: 3753724.0, FN: 69390.0, FP: 66883.0
+    IOU - 0.691
+    DICE - 0.817
+
+
+    final unet 3
+    unet3_1024.keras - IOU: 0.6649644104908401, DICE: 0.7987731224775011, LOSS: 0.3344310224056244, BIN ACC: 0.9650876522064209, TP: 290634.0, TN: 3757237.0, FN: 83063.0, FP: 63370.0
+    IOU - 0.665
+    DICE - 0.799
+
+
+    3 unnorm - IOU: 0.0, DICE: 0.0, LOSS: nan, BIN ACC: 0.9095194339752197, TP: 0.0, TN: 3814801.0, FN: 373697.0, FP: 5806.0
+    2 unnorm - IOU: 0.0, DICE: 0.0, LOSS: nan, BIN ACC: 0.9104194641113281, TP: 0.0, TN: 3818576.0, FN: 373697.0, FP: 2031.0
     """
 
-    # predict
-    yhat = model.predict(test)
-    yhat = (np.array(yhat) > 0.5).astype(np.uint8) * 255
-
-    test_names = sorted(os.listdir("./Data/test/image"), key=lambda n:int(os.path.splitext(n)[0]))
-
-    for name, p in zip(test_names, yhat):
-        pred = p.reshape(IMAGE_SIZE).astype(np.uint8) # from (256, 256, 1) to (256, 256)
-        mask = Image.fromarray(pred).resize((512, 512), Image.NEAREST)
-        mask.save(f"./predictions/{name}")
-
-    # then run make_submission.py ./predictions
+    

@@ -6,3 +6,5 @@ Data
 *.png
 predictions
 predictions/*
+__pycache__
+__pycache__/*
